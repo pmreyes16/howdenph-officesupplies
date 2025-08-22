@@ -22,7 +22,7 @@ const UsersPage: React.FC = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('Users').select('*');
+  const { data, error } = await supabase.from('Users').select('*');
     console.log('Fetched users:', data);
     if (error) setError(error.message);
     else setUsers(data || []);
@@ -45,7 +45,7 @@ const UsersPage: React.FC = () => {
 
   const saveEdit = async (id: string) => {
     setLoading(true);
-    const { error } = await supabase.from('Users').update(editData).eq('id', id);
+  const { error } = await supabase.from('users').update(editData).eq('id', id);
     if (error) setError(error.message);
     else {
       setEditingId(null);
@@ -58,7 +58,7 @@ const UsersPage: React.FC = () => {
   const deleteUser = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this user?')) return;
     setLoading(true);
-    const { error } = await supabase.from('Users').delete().eq('id', id);
+  const { error } = await supabase.from('users').delete().eq('id', id);
     if (error) setError(error.message);
     else fetchUsers();
     setLoading(false);
