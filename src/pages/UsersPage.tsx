@@ -19,13 +19,27 @@ const UsersPage: React.FC = () => {
   const [editData, setEditData] = useState<Partial<User>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     setLoading(true);
-  const { data, error } = await supabase.from('Users').select('*');
-    console.log('Fetched users:', data);
-    if (error) setError(error.message);
-    else setUsers(data || []);
+    let data, error;
+    // Try 'Users' first
+    ({ data, error } = await supabase.from('Users').select('*'));
+    if (error || !data) {
+      // If error, try 'users'
+      const res = await supabase.from('users').select('*');
+      if (res.error) {
+        setError(res.error.message);
+        setUsers([]);
+      } else {
+        setUsers(res.data || []);
+        setError(null);
+      }
+    } else {
+      setUsers(data || []);
+      setError(null);
+    }
     setLoading(false);
   };
 
@@ -35,7 +49,12 @@ const UsersPage: React.FC = () => {
 
   const startEdit = (user: User) => {
     setEditingId(user.id);
-    setEditData({ name: user.name, email: user.email, role: user.role, department: user.department });
+    setEditData({
+      name: user.name ?? '',
+      email: user.email ?? '',
+      role: user.role ?? 'user',
+      department: user.department ?? ''
+    });
   };
 
   const cancelEdit = () => {
@@ -45,11 +64,21 @@ const UsersPage: React.FC = () => {
 
   const saveEdit = async (id: string) => {
     setLoading(true);
-  const { error } = await supabase.from('users').update(editData).eq('id', id);
-    if (error) setError(error.message);
-    else {
+    setError(null);
+    setSuccess(null);
+    // Always include role in update
+    const updateData = { ...editData, role: editData.role ?? 'user' };
+    let error = (await supabase.from('Users').update(updateData).eq('id', id)).error;
+    if (error) {
+      error = (await supabase.from('users').update(updateData).eq('id', id)).error;
+    }
+    if (error) {
+      setError(error.message);
+      setSuccess(null);
+    } else {
       setEditingId(null);
       setEditData({});
+      setSuccess('User role updated successfully!');
       fetchUsers();
     }
     setLoading(false);
@@ -58,7 +87,10 @@ const UsersPage: React.FC = () => {
   const deleteUser = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this user?')) return;
     setLoading(true);
-  const { error } = await supabase.from('users').delete().eq('id', id);
+    let error = (await supabase.from('Users').delete().eq('id', id)).error;
+    if (error) {
+      error = (await supabase.from('users').delete().eq('id', id)).error;
+    }
     if (error) setError(error.message);
     else fetchUsers();
     setLoading(false);
@@ -82,7 +114,8 @@ const UsersPage: React.FC = () => {
         </div>
       </div>
       <h1 className="text-2xl font-bold mb-4">User Management</h1>
-      {error && <div className="text-red-600 mb-2">{error}</div>}
+  {error && <div className="text-red-600 mb-2">{error}</div>}
+  {success && <div className="text-green-600 mb-2">{success}</div>}
       {loading && <div className="text-gray-500 mb-2">Loading...</div>}
       <table className="w-full border mb-4">
         <thead>
