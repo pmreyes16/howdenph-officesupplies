@@ -3,9 +3,38 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// import bcrypt from 'bcryptjs';
 
-interface AddUserFormProps {
-  onAdd: (user: { id: string; name: string; email: string; role: 'admin' | 'user'; password: string; department: string }) => void;
+// Update the user type to include all fields
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'superadmin' | 'admin' | 'user';
+  password: string;
+  department: string;
+  // ...any other fields you use
+}
+
+// Update the addUser function type
+interface AppContextType {
+  // ...
+  addUser: (user: User) => Promise<void>;
+  // ...
+}
+
+// Import your Supabase client (adjust the path as needed)
+import { supabase } from '@/lib/supabaseClient';
+
+// In your AppContext implementation:
+const addUser = (user: { id: string; name: string; email: string; role: 'superadmin' | 'admin' | 'user'; password: string; department: string }) => {
+  // implementation
+  // For example, you might call your Supabase insert here:
+  // return supabase.from('Users').insert([user]);
+};
+
+export interface AddUserFormProps {
+  onAdd: (user: { name: string; email: string; role: 'user' | 'admin' | 'superadmin'; password: string; department: string }) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -14,19 +43,22 @@ const AddUserForm: React.FC<AddUserFormProps> = ({ onAdd, onClose }) => {
   const id = React.useMemo(() => (window.crypto?.randomUUID ? window.crypto.randomUUID() : Math.random().toString(36).slice(2)), []);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'user'>('user');
+  const [role, setRole] = useState<'superadmin' | 'admin' | 'user'>('user');
   const [password, setPassword] = useState('');
   const [department, setDepartment] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const departments = ['Office of the President','CRS', 'EB', 'RI', 'Claims', 'Finance', 'IT', 'Admin', 'Human Resources'];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    Promise.resolve(onAdd({ id, name, email, role, password, department }))
-      .then(() => onClose())
-      .catch((err: any) => setError(err.message || 'Failed to add user.'));
+    try {
+      await onAdd({ name, email, role, password, department });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to add user.');
+    }
   };
 
   return (
@@ -48,9 +80,10 @@ const AddUserForm: React.FC<AddUserFormProps> = ({ onAdd, onClose }) => {
         </div>
         <div>
           <Label htmlFor="role">Role</Label>
-          <select id="role" value={role} onChange={e => setRole(e.target.value as 'admin' | 'user')} className="w-full border rounded px-2 py-1">
+          <select id="role" value={role} onChange={e => setRole(e.target.value as 'superadmin' | 'admin' | 'user')} className="w-full border rounded px-2 py-1">
             <option value="user">Standard User</option>
             <option value="admin">Admin</option>
+            <option value="superadmin">Super Admin</option>
           </select>
         </div>
         <div>

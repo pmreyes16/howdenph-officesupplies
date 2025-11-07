@@ -1,13 +1,26 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+// import bcrypt from 'bcryptjs';
+// End of Request interface
 
-export interface User {
+export interface LoginLog {
   id: string;
+  user_id: string;
   username: string;
-  role: 'admin' | 'user';
-  name: string;
-  department: string;
+  login_time: string;
+  ip_address?: string;
+  user_agent?: string;
+  success: boolean;
 }
+
+// Add users to your context type
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'user' | 'admin' | 'superadmin';
+  department?: string;
+};
 
 export interface InventoryItem {
   id: string;
@@ -16,6 +29,7 @@ export interface InventoryItem {
   quantity: number;
   minstock: number;
   supplier: string;
+  price: number; // <-- Add this line
 }
 
 export interface Request {
@@ -35,18 +49,21 @@ export interface Request {
   archived?: boolean;
 }
 
-interface AppContextType {
+export interface AppContextType {
   user: User | null;
+  users: User[]; // <-- Make sure this is here
   inventory: InventoryItem[];
   requests: Request[];
-  login: (username: string, password: string) => Promise<boolean>;
+  loginLogs: LoginLog[];
+  login: (username: string, password: string) => Promise<{ success: boolean; user: User | null }>;
   logout: () => void;
   addItem: (item: Omit<InventoryItem, 'id'>) => void;
   updateItem: (id: string, updates: Partial<InventoryItem>) => void;
   deleteItem: (id: string) => void;
   createRequest: (itemId: string, quantity: number, notes?: string) => void;
   updateRequest: (id: string, status: Request['status']) => void;
-  addUser: (user: { name: string; email: string; role: 'admin' | 'user'; password: string; department: string }) => void;
+  addUser: (user: { name: string; email: string; role: 'admin' | 'user'; password: string; department: string }) => Promise<void>;
+  updateInventoryStock: (itemName: string, quantityToDeduct: number) => Promise<boolean>; // <-- Add this line
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -54,17 +71,17 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 // Mock users
 // Mock users
 const mockUsers: User[] = [
-  { id: '1', username: 'admin', role: 'admin', name: 'Admin User', department: 'IT' },
-  { id: '2', username: 'user1', role: 'user', name: 'John Doe', department: 'Marketing' },
-  { id: '3', username: 'user2', role: 'user', name: 'Jane Smith', department: 'HR' },
-  { id: '4', username: 'user3', role: 'user', name: 'Mike Johnson', department: 'Finance' },
+  { id: '1', role: 'admin', name: 'Admin User', email: 'admin@example.com', department: 'IT' },
+  { id: '2', role: 'user', name: 'John Doe', email: 'user1@example.com', department: 'Marketing' },
+  { id: '3', role: 'user', name: 'Jane Smith', email: 'user2@example.com', department: 'HR' },
+  { id: '4', role: 'user', name: 'Mike Johnson', email: 'user3@example.com', department: 'Finance' },
 ];
 
 // Mock inventory
 const mockInventory: InventoryItem[] = [
-  { id: '1', name: 'Pens (Blue)', category: 'Writing', quantity: 150, minstock: 20, supplier: 'Office Depot' },
-  { id: '2', name: 'A4 Paper', category: 'Paper', quantity: 5, minstock: 10, supplier: 'Staples' },
-  { id: '3', name: 'Staplers', category: 'Tools', quantity: 8, minstock: 5, supplier: 'Amazon' },
+  { id: '1', name: 'Pens (Blue)', category: 'Writing', quantity: 150, minstock: 20, supplier: 'Office Depot', price: 0.99 },
+  { id: '2', name: 'A4 Paper', category: 'Paper', quantity: 5, minstock: 10, supplier: 'Staples', price: 4.99 },
+  { id: '3', name: 'Staplers', category: 'Tools', quantity: 8, minstock: 5, supplier: 'Amazon', price: 19.99 },
 ];
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -106,7 +123,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [user]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   useEffect(() => {
-    // Fetch inventory and requests from Supabase on app load
+    // Fetch inventory, requests, and loginLogs from Supabase on app load
     const fetchInventory = async () => {
       const { data, error } = await supabase.from('Inventory').select('*');
       if (error) {
@@ -115,21 +132,60 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setInventory(data);
       }
     };
+
     const fetchRequests = async () => {
-      const { data, error } = await supabase.from('Requests').select('*');
+      let data, error;
+      if (user?.role === 'superadmin') {
+        // Superadmin: fetch only pending requests from public.Requests
+        ({ data, error } = await supabase
+          .from('Requests')
+          .select('*')
+          .eq('status', 'pending'));
+      } else if (user?.role === 'admin') {
+        // Admin: fetch all requests
+        ({ data, error } = await supabase
+          .from('Requests')
+          .select('*'));
+      } else if (user?.role === 'user' && user?.id) {
+        // User: fetch only their own requests
+        ({ data, error } = await supabase
+          .from('Requests')
+          .select('*')
+          .eq('userId', user.id));
+      } else {
+        // Default: fetch nothing
+        data = [];
+      }
+      if (!error && data) setRequests(data);
+    };
+
+    const fetchLoginLogs = async () => {
+      const { data, error } = await supabase.from('loginlogs').select('*');
       if (error) {
-        console.error('Supabase fetch requests error:', error.message);
+        console.error('Supabase fetch loginlogs error:', error.message);
+      }
+      setLoginLogs(data || []);
+    };
+
+    const fetchUsers = async () => {
+      const { data, error } = await supabase.from('Users').select('*');
+      if (error) {
+        console.error('Supabase fetch users error:', error.message);
       } else if (data) {
-        setRequests(data);
+        setUsers(data);
       }
     };
+
     fetchInventory();
     fetchRequests();
-  }, []);
+    fetchLoginLogs();
+    fetchUsers();
+  }, [user]); // <-- re-run when user changes
   const [requests, setRequests] = useState<Request[]>([]);
+  const [loginLogs, setLoginLogs] = useState<LoginLog[]>([]);
   const [users, setUsers] = useState<User[]>(mockUsers);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<{ success: boolean; user: User | null }> => {
     // After login, fetch inventory and requests from Supabase
     const inventoryResult = await supabase.from('Inventory').select('*');
     if (!inventoryResult.error && inventoryResult.data) {
@@ -139,56 +195,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!requestsResult.error && requestsResult.data) {
       setRequests(requestsResult.data);
     }
-    // Try Supabase authentication first
-    const userResult = await supabase
-      .from('Users')
-      .select('*')
-      .eq('email', username)
-      .eq('password', password)
-      .limit(1);
-    if (userResult.error) {
-      console.error('Supabase login error:', userResult.error.message, userResult.error.details);
+
+    // Try Supabase authentication first (allow login by username or email, plain text password)
+      // Test with only email field to isolate .or filter issue
+      const userResult = await supabase
+        .from('Users')
+        .select('*')
+        .eq('email', username)
+        .limit(1);
+
+    const supabaseUser = userResult.data && userResult.data[0];
+    if (supabaseUser && password === supabaseUser.password) {
+      const userObj: User = {
+        id: supabaseUser.id,
+        email: supabaseUser.email,
+        role: supabaseUser.role,
+        name: supabaseUser.name,
+        department: supabaseUser.department || '',
+      };
+      setUser(userObj);
+      // loginlogs functionality is handled in LoginForm.tsx
+      return { success: true, user: userObj };
     }
-    console.log('Supabase login query result:', userResult.data);
-    const user = userResult.data && userResult.data[0];
-    if (user) {
-      setUser({
-        id: user.id,
-        username: user.email,
-        role: user.role,
-        name: user.name,
-        department: user.department || '',
-      });
-      // Log to Supabase audit_log_entries
-      supabase.from('auth.audit_log_entries').insert([
-        {
-          event_type: 'login',
-          user_id: user.id,
-          username: user.email,
-          timestamp: new Date().toISOString(),
-          details: 'User logged in successfully.'
-        }
-      ]);
-      return true;
-    } else {
-      console.warn('No matching user found in Supabase for:', username);
-    }
-    // Fallback to mock users
-  const foundUser = mockUsers.find(u => u.username === username && password === 'password');
-    if (foundUser) {
-      setUser(foundUser);
-      supabase.from('auth.audit_log_entries').insert([
-        {
-          event_type: 'login',
-          user_id: foundUser.id,
-          username: foundUser.username,
-          timestamp: new Date().toISOString(),
-          details: 'Mock user logged in.'
-        }
-      ]);
-      return true;
-    }
-    return false;
+    return { success: false, user: null };
   };
 
   // Also clear localStorage on logout
@@ -209,17 +238,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   supabase.from('Inventory').insert([newItem]);
   };
 
-  const updateItem = (id: string, updates: Partial<InventoryItem>) => {
-    // Ensure minstock is used instead of minStock
-    if ('minStock' in updates) {
-      updates.minstock = Number((updates as any).minStock);
-      delete (updates as any).minStock;
+  const updateItem = async (id: string, updates: Partial<InventoryItem>) => {
+    // Update the item in Supabase
+    const { error } = await supabase
+      .from('Inventory')
+      .update(updates)
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating item:', error.message);
+      return;
     }
-    setInventory(prev => prev.map(item => 
-      item.id === id ? { ...item, ...updates } : item
-    ));
-    // Update in Supabase
-    supabase.from('Inventory').update(updates).eq('id', id);
+
+    // Optionally, update the local state (if you keep inventory in state)
+    setInventory((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
   };
 
   const deleteItem = (id: string) => {
@@ -280,38 +314,78 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const addUser = async (newUser: { id: string; name: string; email: string; role: 'admin' | 'user'; password: string; department: string }) => {
-    // Add to local state
+  const addUser = async (user: {
+    name: string;
+    email: string;
+    role: 'user' | 'admin';
+    password: string;
+    department: string;
+  }) => {
+    const id = Date.now().toString();
+    // Save plain text password
     setUsers(prev => [
       ...prev,
       {
-        id: newUser.id,
-        username: newUser.email,
-        name: newUser.name,
-        department: newUser.department,
-        role: newUser.role,
-        password: newUser.password,
-        email: newUser.email,
+        id,
+        name: user.name,
+        department: user.department,
+        role: user.role,
+        email: user.email,
       }
     ]);
     // Add to Supabase
     const { error } = await supabase.from('Users').insert([
       {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        password: newUser.password,
-        department: newUser.department
+        id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        password: user.password,
+        department: user.department
       }
     ]);
     if (error) throw new Error(error.message);
   };
 
+  const updateInventoryStock = async (itemName: string, quantityToDeduct: number) => {
+    // Find the item in inventory by name
+    const item = inventory.find(i => i.name === itemName);
+    if (!item) {
+      console.error(`Item ${itemName} not found in inventory`);
+      return false;
+    }
+
+    // Calculate new quantity
+    const newQuantity = item.quantity - quantityToDeduct;
+    
+    if (newQuantity < 0) {
+      console.error(`Not enough stock for ${itemName}. Available: ${item.quantity}, Requested: ${quantityToDeduct}`);
+      return false;
+    }
+
+    // Update in Supabase
+    const { error } = await supabase
+      .from('Inventory')
+      .update({ quantity: newQuantity })
+      .eq('id', item.id);
+
+    if (error) {
+      console.error('Error updating inventory:', error);
+      return false;
+    }
+
+    // Update local state
+    setInventory(prev => prev.map(i => 
+      i.id === item.id ? { ...i, quantity: newQuantity } : i
+    ));
+
+    return true;
+  };
+
   return (
     <AppContext.Provider value={{
-      user, inventory, requests, login, logout, addItem, 
-      updateItem, deleteItem, createRequest, updateRequest, addUser
+      user, users, inventory, requests, loginLogs, login, logout, addItem, 
+      updateItem, deleteItem, createRequest, updateRequest, addUser, updateInventoryStock
     }}>
       {children}
     </AppContext.Provider>

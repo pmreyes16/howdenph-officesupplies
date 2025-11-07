@@ -51,3 +51,29 @@
 .read-the-docs {
   color: #5f7676;
 }
+
+/* Add to your global CSS file */
+@keyframes float1 {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(40px) scale(1.05);
+  }
+}
+@keyframes float2 {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-30px) scale(1.08);
+  }
+}
+.animate-float1 {
+  animation: float1 8s ease-in-out infinite;
+}
+.animate-float2 {
+  animation: float2 10s ease-in-out infinite;
+}

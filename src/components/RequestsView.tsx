@@ -9,10 +9,11 @@ import { Link } from 'react-router-dom';
 const RequestsView: React.FC = () => {
   const { user, requests, updateRequest } = useApp();
 
-  // Admins see all requests; users see only their own requests (any status)
-  const userRequests = user?.role === 'admin'
-    ? requests.filter(req => req.archived !== true)
-    : requests.filter(req => req.userId === user?.id);
+  // Admins and superadmins see all requests; users see only their own requests (any status)
+  const userRequests =
+    user?.role === 'admin' || user?.role === 'superadmin'
+      ? requests.filter(req => req.archived !== true)
+      : requests.filter(req => req.userId === user?.id);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -110,7 +111,7 @@ const RequestsView: React.FC = () => {
                 </div>
               )}
               
-              {user?.role === 'admin' && request.status === 'pending' && (
+              {(user?.role === 'admin' || user?.role === 'superadmin') && request.status === 'pending' && (
                 <div className="flex gap-2 pt-2">
                   <Button
                     size="sm"
@@ -132,7 +133,7 @@ const RequestsView: React.FC = () => {
                 </div>
               )}
               
-              {user?.role === 'admin' && request.status === 'approved' && (
+              {(user?.role === 'admin' || user?.role === 'superadmin') && request.status === 'approved' && (
                 <Button
                   size="sm"
                   onClick={() => handleStatusUpdate(request.id, 'fulfilled')}

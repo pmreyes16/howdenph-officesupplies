@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://qcsdytspmmnqwdrwoiuj.supabase.co'; // Replace with your Supabase project URL
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjc2R5dHNwbW1ucXdkcndvaXVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3Mjc3MTksImV4cCI6MjA3MDMwMzcxOX0.TsiyC1f2VaB9RtmlAQPFlAKM5rDlWY0EJX4sZN2wFpc'; // Replace with your Supabase anon key
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 export const addItemToInventory = async (item) => {
     const newItem = { ...item, id: Date.now().toString() };

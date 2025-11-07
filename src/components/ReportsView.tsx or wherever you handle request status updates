@@ -1,0 +1,25 @@
+const updateRequestStatus = async (requestId: string, newStatus: string, request: any) => {
+  // Update request status
+  const { error } = await supabase
+    .from('Requests')
+    .update({ status: newStatus })
+    .eq('id', requestId);
+
+  if (error) {
+    alert('Error updating request status: ' + error.message);
+    return;
+  }
+
+  // If approved, deduct from inventory
+  if (newStatus === 'approved') {
+    const success = await updateInventoryStock(request.itemName, request.quantity);
+    if (!success) {
+      alert(`Warning: Request approved but inventory could not be updated for ${request.itemName}`);
+    }
+  }
+
+  // Update local state
+  setRequestsData(prev => prev.map(r => 
+    r.id === requestId ? { ...r, status: newStatus } : r
+  ));
+};

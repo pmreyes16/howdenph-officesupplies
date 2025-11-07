@@ -142,9 +142,14 @@ const UsersPage: React.FC = () => {
               </td>
               <td className="border p-2">
                 {editingId === user.id ? (
-                  <select value={editData.role || ''} onChange={e => setEditData(d => ({ ...d, role: e.target.value }))} className="border rounded px-2 py-1">
+                  <select
+                    value={editData.role || ''}
+                    onChange={e => setEditData(d => ({ ...d, role: e.target.value }))}
+                    className="border rounded px-2 py-1"
+                  >
                     <option value="user">Standard User</option>
                     <option value="admin">Admin</option>
+                    <option value="superadmin">Super Admin</option>
                   </select>
                 ) : user.role}
               </td>
